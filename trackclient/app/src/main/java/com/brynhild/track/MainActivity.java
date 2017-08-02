@@ -1,10 +1,13 @@
 package com.brynhild.track;
 
+import android.Manifest;
 import android.content.Context;
 
+import android.content.pm.PackageManager;
 import android.location.LocationManager;
-import android.net.Uri;
+import android.os.Build;
 import android.os.Looper;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -21,12 +24,28 @@ import android.os.Message;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+
+/*
+MIUI 后台5分钟就被关闭了
+
+必须单独设置神隐模式，把Track App设为无作用，不使用手机系统的后台省电策略
+
+[2017-08-02]
+
+ */
 
 
 
@@ -53,6 +72,66 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
 	protected ArrayDeque<String> mArrLog = new ArrayDeque<String>();
 
+	// Log文件位置
+	FileOutputStream m_logStream = null;
+
+
+	// 创建Log文件
+	protected void createLogFile()
+	{
+		String sDir = "/sdcard/atrack";
+		File destDir = new File(sDir);
+
+		if (!destDir.exists())
+		{
+			destDir.mkdirs();
+		}
+
+		SimpleDateFormat sDateFormat = new SimpleDateFormat("yyyy-MM-dd_hh-mm-ss");
+		String strFile = sDateFormat.format(new java.util.Date());
+		String strRecordFile = sDir +"/" + strFile + ".txt";
+		File saveFile = new File(strRecordFile);
+		try
+		{
+			m_logStream = new FileOutputStream(saveFile);
+
+		}
+		catch (FileNotFoundException e1)
+		{
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+	}
+
+	// 保存到log文件
+	protected void recordLog(String str)
+	{
+		if(m_logStream != null)
+		{
+			try
+			{
+				SimpleDateFormat sDateFormat = new SimpleDateFormat("[yyyy-MM-dd hh-mm-ss] ");
+				String strTime = sDateFormat.format(new java.util.Date());
+
+				m_logStream.write(strTime.getBytes());
+				m_logStream.write(str.getBytes());
+				m_logStream.write("\r\n".getBytes());
+				m_logStream.flush();
+
+			}
+			catch (FileNotFoundException e1)
+			{
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			catch (IOException e2)
+			{
+				// TODO Auto-generated catch block
+				e2.printStackTrace();
+			}
+		}
+	}
+
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +146,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
 		// 禁止编辑
 		mEditMsg.setKeyListener(null);
+
+		createLogFile();
 
 		mThreadUpload = new httpUploadThread();
 		mThreadUpload.start();
@@ -84,6 +165,8 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 					break;
 					case KMSG_LOG_GPS: {
 						String str = (String) msg.obj;
+
+						recordLog(str);
 						mArrLog.addFirst(str);
 						int max_size = 100;
 
@@ -107,15 +190,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 					}
 					break;
 					case KMSG_UP_URL: {
-						String str = (String) msg.obj;
-						String strUrl = "http://" + mEditIP.getText();
-						strUrl += "/test?";
-						strUrl += str;
+						TrackRecord record = (TrackRecord) msg.obj;
+						record.mySrverUrl =  mEditIP.getText().toString();
 
 						Log.d("aaa", "nnn 22 KMSG_UP_URL ...");
 
-						mThreadUpload.mThreadHandler.obtainMessage(KMSG_UP_LOC, msg.arg1, msg.arg2, strUrl).sendToTarget();
-
+						mThreadUpload.mThreadHandler.obtainMessage(KMSG_UP_LOC, record).sendToTarget();
 
 						break;
 					}
@@ -126,6 +206,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 				msg = null;
 			}
 		};
+
+
+
 
 
 		// 设置GPS
@@ -163,6 +246,20 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
 	protected void onStartButtonClick() {
 
+		// 要申请的权限 数组 可以同时申请多个权限
+		String[] permissions = {Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION};
+
+		// 如果超过6.0才需要动态权限，否则不需要动态权限
+		if (Build.VERSION.SDK_INT >= 23)
+		{
+			int check = ContextCompat.checkSelfPermission(this, permissions[0]);
+			if (check != PackageManager.PERMISSION_GRANTED)
+			{
+				requestPermissions(permissions, 1);
+				return;
+			}
+		}
+
 		// 开始监听GPS
 
 		boolean bUseExLocation = false;
@@ -187,25 +284,20 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 				public void handleMessage(Message msg) {
 					if (msg.what == KMSG_UP_LOC) {
 
-						Pair<String, String> pNames = getBaiduPOIName(msg.arg1 / (1024 * 3600.0), msg.arg2 / (1024 * 3600.0));
+						TrackRecord record = (TrackRecord) msg.obj;
 
-						String strUrl = (String) msg.obj;
+						// 从baidu获取poi名称
+						Pair<String, String> pNames = getBaiduPOIName(record.lat, record.lon);
 
-						try
-						{
-							// 中文必须转码 不能有空格
+						record.next_station = pNames.first;
+						record.poi = pNames.second;
 
-							strUrl = String.format("%s&next_station=%s&poi=%s",
-									strUrl,
-									URLEncoder.encode(pNames.first,  "UTF-8"),
-									URLEncoder.encode(pNames.second,  "UTF-8"));
-						}
-						catch (Exception e) {
-							e.printStackTrace();
+						// 上传自己的服务器
+						upload2MyServer(record);
 
-						}
 
-						connectUrl(strUrl);
+						// 上传到baidu鹰眼服务器
+						upload2BaiduTrack(record);
 
 						Log.d("aa","nnn 3 httpUploadThread KMSG_UP_LOC" );
 
@@ -218,13 +310,63 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 			Looper.loop();
 		}
 
+		protected String buildMyServerUrl(TrackRecord record)
+		{
 
-		protected void connectUrl(String path) {
-			// 通过http请求把图片获取下来。
+			String strTime = "";
+			String strName1 = "";
+			String strName2 = "";
+
+		     try
+		     {
+			     // 中文必须转码
+			     // 不能有空格
+			     strTime  = URLEncoder.encode(record.localtime, "UTF-8");
+			     strName1  = URLEncoder.encode(record.next_station, "UTF-8");
+			     strName2  = URLEncoder.encode(record.poi, "UTF-8");
+
+		     }
+		     catch (Exception e) {
+			     e.printStackTrace();
+
+		     }
+
+		     int iLat =  (int)(record.lat * 1024.0 * 3600.0);
+		     int iLon =  (int)(record.lon * 1024.0 * 3600.0);
+
+
+		     String strUrl = String.format("http://%s/test?route_id=%d&localtime=%s&lot=%d&lat=%d&alt=%.1f&speed=%.1f&head=%.1f&" +
+				     "accracy=%.1f&type=%d&seg_index=%d&next_station=%s&poi=%s" ,
+				     record.mySrverUrl,
+				     record.route_id,
+				     strTime,
+				     iLon,
+				     iLat,
+				     record.alt,
+				     record.speed,
+				     record.head,
+				     record.accracy,
+				     record.type,
+				     record.seg_index,
+				     strName1,
+				     strName2);
+
+			return  strUrl;
+
+		}
+
+
+		// 上传数据到自己的服务器
+		protected boolean upload2MyServer(TrackRecord record) {
+
+			String strUrl = buildMyServerUrl(record);
+
+			boolean ret = false;
+
 			try {
 				// 1.声明访问的路径， url 网络资源 http ftp rtsp, 中文必须转码
 
-				URL url = new URL(path);
+				URL url = new URL(strUrl);
 
 //				URL url = new URL("http://27.18.58.23:5000/show");
 
@@ -234,35 +376,13 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 				conn.setConnectTimeout(5000);
 				conn.setReadTimeout(5000);
 
-//				conn.setRequestProperty("Accept-Charset", "utf-8");
-//				conn.setRequestProperty("Content-Type", "text/html; charset=utf-8");
-//				conn.setDoOutput(true);
-
-//				conn.setRequestProperty("Accept",
-//						"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"); // 设置内容类型
-//
-//				conn.setRequestProperty("Accept-Encoding",
-//						"gzip, deflate, sdch"); // 设置内容类型
-//
-//				conn.setRequestProperty("Accept-Language",
-//						"zh-CN,zh;q=0.8"); // 设置内容类型
-//
-//				conn.setRequestProperty("User-Agent",
-//						"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36"); // 设置内容类型
-//
-
 				// 3.判断服务器给我们返回的状态信息。
 				// 200 成功 302 从定向 404资源没找到 5xx 服务器内部错误
 				int code = conn.getResponseCode();
 				if (code == 200) {
-					// 4.利用链接成功的 conn 得到输入流
-					//InputStream is = conn.getInputStream();// png的图片
-
-					// 5. ImageView设置Bitmap,用BitMap工厂解析输入流
-
-					//mIvShow.setImageBitmap(BitmapFactory.decodeStream(is));
 
 					m_Handler.obtainMessage(KMSG_LOG_GPS, "upload loc ok").sendToTarget();
+					ret = true;
 				} else {
 					// 请求失败
 					//Toast.makeText(this, "请求失败", Toast.LENGTH_SHORT).show();
@@ -275,8 +395,11 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 				//Toast.makeText(this, "发生异常，请求失败", Toast.LENGTH_SHORT).show();
 				m_Handler.obtainMessage(KMSG_LOG_GPS, "server error " + e.toString()).sendToTarget();
 			}
+
+			return  ret;
 		}
 
+		// discard,  google api 位置不是总是准
 		//  http://maps.google.cn/maps/api/geocode/json?latlng=114.442612,30.409053&sensor=true&language=zh-CN
 		protected Pair<String, String> getGooglePOIName(double lat, double lng) {
 
@@ -343,7 +466,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 			return    new Pair<String, String> (strRouteName, strPOI);
 		}
 
-
+		// 根据baidu api获取指定坐标的poi名称
 		//  http://api.map.baidu.com/geocoder/v2/?coordtype=wgs84ll&location=33.4027019,114.112351888&output=json&pois=0&ak=96fd36a93d2f61e5cb517a6485b7ec8e
 		protected Pair<String, String> getBaiduPOIName(double lat, double lng) {
 
@@ -420,6 +543,98 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
 
 			return    new Pair<String, String> (strRouteName, strPOI);
 		}
+
+
+
+
+
+		// 上传数据到百度鹰眼 http://lbsyun.baidu.com/index.php?title=yingyan/api/v3/trackupload
+		// post data:   ak=96fd36a93d2f61e5cb517a6485b7ec8e&service_id=147154&entity_name=雄楚线&latitude=30.40915147569&longitude=114.442293565&
+		// loc_time=1501462090&coord_type_input=wgs84&speed=4&direction=345&height=22&radius=17
+		protected boolean upload2BaiduTrack(TrackRecord record)
+		{
+
+			boolean ret = false;
+
+			String strUrl = "http://yingyan.baidu.com/api/v3/track/addpoint";
+
+			try {
+
+				String strEntity  = URLEncoder.encode(record.entity, "UTF-8");
+
+				String strPost = String.format("ak=96fd36a93d2f61e5cb517a6485b7ec8e&service_id=147154&entity_name=%s" +
+								"&latitude=%f&longitude=%f&loc_time=%d&coord_type_input=wgs84&speed=%.1f&direction=%d&height=%.1f&radius=%.1f",
+						strEntity,
+						record.lat,
+						record.lon,
+						record.timestamps,
+						record.speed,
+						(int)record.head,
+						record.alt,
+						record.accracy);
+
+				URL url = new URL(strUrl);
+
+				// 2.通过路径得到一个连接 http的连接
+				HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+				conn.setRequestMethod("POST");
+				conn.setConnectTimeout(5000);
+				conn.setReadTimeout(5000);
+
+				// 发送POST请求必须设置如下两行
+				conn.setDoOutput(true);
+				conn.setDoInput(true);
+				// 获取URLConnection对象对应的输出流
+				PrintWriter printWriter = new PrintWriter(conn.getOutputStream());
+				// 发送请求参数
+				printWriter.write(strPost);//post的参数 xx=xx&yy=yy
+				// flush输出流的缓冲
+				printWriter.flush();
+
+				//开始获取数据
+				BufferedInputStream bis = new BufferedInputStream(conn.getInputStream());
+				ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				int len;
+				byte[] arr = new byte[1024];
+				while((len=bis.read(arr))!= -1){
+					bos.write(arr,0,len);
+					bos.flush();
+				}
+				bos.close();
+				String strResult = bos.toString("utf-8");
+
+				JSONObject jsonObject = new JSONObject(strResult);
+				int status  = jsonObject.getInt("status");
+
+				if(status == 0)
+				{
+					// ok
+					ret = true;
+					m_Handler.obtainMessage(KMSG_LOG_GPS, "upload to BaiduTrack ok").sendToTarget();
+
+
+				}
+				else
+				{
+					// 上传失败
+					m_Handler.obtainMessage(KMSG_LOG_GPS, "upload to BaiduTrack faild " + strResult + " " + conn.getResponseMessage()).sendToTarget();
+
+				}
+
+			}
+			catch (Exception e)
+			{
+				e.printStackTrace();
+
+				m_Handler.obtainMessage(KMSG_LOG_GPS, "upload to BaiduTrack faild " + e.toString()).sendToTarget();
+			}
+
+			return ret;
+
+		}
+
+
 	}
 
 

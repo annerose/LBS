@@ -22,8 +22,8 @@ import android.os.Environment;
 import android.util.Log;
 
 
-import static com.brynhild.track.MainActivity.KMSG_LOG_GPS;
-import static com.brynhild.track.MainActivity.m_Handler;
+import static  com.brynhild.track.MainActivity.*;
+//import com.brynhild.track.*;
 
 
 public class LocatorController
@@ -290,9 +290,9 @@ public class LocatorController
 			{
 				return;
 			}
+
         	
-        	
-         	String buff = convertLocation2String(location);
+         	convertLocation2String(location);
 
         	
             addMessageLog("Provider " + location.getProvider() +  ": onLocationChanged pos :" + location.getLongitude() + "," + location.getLatitude() + ",Accuracy:" + location.getAccuracy());
@@ -345,16 +345,20 @@ public class LocatorController
 	// poi=%E5%85%B3%E5%B1%B1%E5%A4%A7%E9%81%93
      
      // 把Location 序列化
-     String convertLocation2String(Location location)
+     void convertLocation2String(Location location)
      {
-    	 int routeid = 0;
 
-	     int seg_index = 2;
+	     TrackRecord record = new TrackRecord();
+	     record.route_id = 0;
+	     record.seg_index = 2;
+
 
 
 	     Date date = new Date(location.getTime());
 	     SimpleDateFormat myFmt  = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-	     String strTime = myFmt.format(date);
+	     record.localtime = myFmt.format(date);
+
+	     record.timestamps = location.getTime() /  1000 ;
 
 
 
@@ -365,42 +369,21 @@ public class LocatorController
 		     iType = (byte)(strProvider.charAt(0));
 	     }
 
+	     record.type = iType;
 
-	     try
-	     {
-		     // 中文必须转码
-		     // 不能有空格
-		     strTime  = URLEncoder.encode(strTime, "UTF-8");
-//		     strStation = URLEncoder.encode(strStation, "UTF-8");
-//		     strPoi = URLEncoder.encode(strPoi, "UTF-8");
-	     }
-	     catch (Exception e) {
-		     e.printStackTrace();
+	     record.lon = location.getLongitude();
+	     record.lat = location.getLatitude();
+	     record.accracy = location.getAccuracy();
+	     record.head = location.getBearing();
+	     record.alt = location.getAltitude();
+	     record.speed = location.getSpeed() * 3.6 ;  // m/s -> km/h
+	     record.entity = "雄楚线";
 
-	     }
-
-	     int iLat =  (int)(location.getLatitude() * 1024.0 * 3600.0);
-	     int iLon =  (int)(location.getLongitude() * 1024.0 * 3600.0);
-
-
-
-	     String line = String.format("route_id=%d&localtime=%s&lot=%d&lat=%d&alt=%.1f&speed=%.1f&head=%.1f&" +
-			     "accracy=%.1f&type=%d&seg_index=%d" ,
-			     routeid, strTime,
-			     iLon,
-			     iLat,
-			     location.getAltitude(),
-			     location.getSpeed() * 3.6f,  // m/s -> km/h
-			     location.getBearing(),
-			     location.getAccuracy(),
-			     iType,
-			     seg_index);
 
 	     Log.d(TAG, "nnn 1 convertLocation2String ...");
 
-	     m_Handler.obtainMessage(MainActivity.KMSG_UP_URL, iLat, iLon,   line).sendToTarget();
+	     m_Handler.obtainMessage(MainActivity.KMSG_UP_URL, record).sendToTarget();
 
-        return line;
               
      }
      
@@ -415,7 +398,7 @@ public class LocatorController
 	        	}
 	        	
 	        	
-	        	String buff = convertLocation2String(location);
+	        	convertLocation2String(location);
 
 	        	
 	            // 获取有效的GPS信息的时间
