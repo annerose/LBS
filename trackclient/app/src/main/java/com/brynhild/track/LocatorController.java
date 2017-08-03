@@ -19,10 +19,12 @@ import android.location.LocationProvider;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.util.Log;
 
+import static com.brynhild.track.LocalService.KMSG_LOG_REC;
 
-import static  com.brynhild.track.MainActivity.*;
+
 //import com.brynhild.track.*;
 
 
@@ -35,6 +37,9 @@ public class LocatorController
 	
 	// 全局唯一instance
 	private static LocatorController m_instance = null;
+
+	// 外面传进来
+	Handler m_Handler = null;
 	
 	
 	String m_strProvider = null;
@@ -49,7 +54,7 @@ public class LocatorController
 	public static final int MAX_GPS_VALID_TICKS= 60000;
 
 	// 最小间隔距离500m
-	public static final float MIN_DISTANCE = 100.0f;
+	public static final float MIN_DISTANCE = 50.0f;
 
 	// 最小间隔时间30s
 	public static final int MIN_TIME = 2000;
@@ -71,8 +76,9 @@ public class LocatorController
 	private void addMessageLog(String strMsg)
 	{
 
+
 		Log.d(TAG, strMsg);
-		m_Handler.obtainMessage(KMSG_LOG_GPS, strMsg).sendToTarget();
+		m_Handler.obtainMessage(KMSG_LOG_REC, strMsg).sendToTarget();
  		
 
 	}
@@ -147,16 +153,12 @@ public class LocatorController
 	}
 	
 	
-    public boolean addListener(boolean bUseExLocation )
+    public boolean addListener(boolean bUseExLocation, Handler handler)
     {
     	
     	m_bUseExLocation = bUseExLocation;
+	    m_Handler = handler;
     	
-    	   
-
-
-		
-		
 
     	//获取系统所有的LocationProvider名称  
     	List<String> list = m_locMan.getAllProviders();
@@ -242,14 +244,7 @@ public class LocatorController
 	    		addMessageLog(Log.getStackTraceString(e));
 	    	}
     	}
-    	
-    	// 除了三星P1000 其他手机似乎都不OK
-    	// 这个接口的此方法貌似是预留的一种规范，曾跟踪源码，发现在硬件访问层补充nmea_callback的代码，才能将数据传到应用上层
-//	   if(!m_locMan.addNmeaListener(nmealistener)) {
-//        	Log.d(TAG, "NmeaListener created false");
-//        	return false;
-//        } 
-	   
+
     	m_bAddListener = true;
     	
         return m_bAddListener;
@@ -382,7 +377,7 @@ public class LocatorController
 
 	     Log.d(TAG, "nnn 1 convertLocation2String ...");
 
-	     m_Handler.obtainMessage(MainActivity.KMSG_UP_URL, record).sendToTarget();
+	     m_Handler.obtainMessage(LocalService.KMSG_UP_LOC, record).sendToTarget();
 
               
      }
