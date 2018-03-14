@@ -55,7 +55,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:inputType="textPersonName"
-        android:text="anyway.imwork.net:5000"
+        android:text="118.25.101.175:5000"
         android:ems="10"
         android:id="@+id/editTextIP"
         android:textAlignment="viewStart"

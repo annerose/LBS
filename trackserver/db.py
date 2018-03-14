@@ -77,7 +77,7 @@ def showContents(num):
 
 
 
-    strCSV  =  u'<table border="1">'
+    strCSV  =  '<table border="1">'
     initLen = len(strCSV)
 
 
@@ -86,25 +86,23 @@ def showContents(num):
         #   取列名
         if len(strCSV) == initLen:
 
-            strCSV += u'<tr>'
+            strCSV += '<tr>'
 
             for col in cursor.description:
-                strCSV += u'<th>'
+                strCSV += '<th>'
                 strCSV += col[0]
-                strCSV += u'</th>'
-            strCSV += u'</tr>'
+                strCSV += '</th>'
+            strCSV += '</tr>'
 
 
-        strCSV += u'<tr>'
+        strCSV += '<tr>'
         for rec in row:
-            strCSV += u'<td>'
-            strCSV +=  (unicode(rec))
-            strCSV += u'</td>'
+            strCSV += ('<td> %s </td>' % rec)
 
 
 
 
-        strCSV += u'</tr>'
+        strCSV +='</tr>'
         # print strCSV
         # strHead += '<br>'
 

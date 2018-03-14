@@ -24,6 +24,7 @@ import android.widget.EditText;
 import android.os.Handler;
 import android.os.Message;
 
+import java.io.*;
 
 
 import java.util.ArrayDeque;
@@ -51,7 +52,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
 	public static final int KMSG_LOG_SHOW = 2;
 
 
-
+	public static final String CACHE_FILE_NAME ="ip.txt";
 
 	protected ArrayDeque<String> mArrLog = new ArrayDeque<String>();
 	private LocalService.Binder myBinder = null;
@@ -71,6 +72,12 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
 		// 禁止编辑
 		mEditMsg.setKeyListener(null);
 
+		// 载入上次的ip
+		String strLastIP = loadLastIP();
+		if(!strLastIP.isEmpty())
+		{
+			mEditIP.setText(strLastIP);
+		}
 
 
 		// 消息响应
@@ -156,6 +163,47 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
 
 	}
 
+	protected void saveLastIP(String strIp)
+	{
+		FileOutputStream outputStream;
+
+		try{
+			outputStream = openFileOutput(CACHE_FILE_NAME, Context.MODE_PRIVATE);
+			outputStream.write(strIp.getBytes());
+			outputStream.close();
+		}catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+
+	protected String loadLastIP()
+	{
+
+		FileInputStream inputStream;
+		byte[] buffer = null;
+		try {
+			inputStream = openFileInput(CACHE_FILE_NAME);
+			try {
+				// 获取文件内容长度
+				int fileLen = inputStream.available();
+				// 读取内容到buffer
+				buffer = new byte[fileLen];
+				inputStream.read(buffer);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+
+		// 返回文本信息
+		if (buffer != null)
+			return  new String(buffer);
+		else
+			return "";
+
+	}
+
 	protected void onStartButtonClick() {
 
 		// 要申请的权限 数组 可以同时申请多个权限
@@ -172,6 +220,9 @@ public class MainActivity extends AppCompatActivity implements OnClickListener, 
 			}
 		}
 
+		String strIP = mEditIP.getText().toString();
+
+		saveLastIP(strIP);
 
 		// 启动service
 		Intent startIntent = new Intent(this, LocalService.class);

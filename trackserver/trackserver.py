@@ -1,4 +1,5 @@
-#!/usr/bin/python
+##################################!/usr/bin/python
+# for python3.6             2018-3-14
 # -*- coding: utf-8 -*-
 
 __author__ = 'dddd'
@@ -27,7 +28,7 @@ def hello():
 @app.route('/test', methods=['GET', 'POST'])
 def test():
 
-    argsItems = request.args.items()
+    argsItems = request.args
     if argsItems and len(argsItems) >= 12 :
         record = {'route_id': int(request.args.get('route_id')),
         'localtime':request.args.get('localtime'),
